@@ -1,14 +1,29 @@
 import sys
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                             QHBoxLayout, QGridLayout, QLabel, QLineEdit, 
                             QComboBox, QTabWidget, QPushButton, QTableWidget, 
                             QTableWidgetItem, QCheckBox, QHeaderView, QGroupBox, 
                             QDoubleSpinBox, QFileDialog, QMessageBox, QToolTip, 
-                            QScrollArea, QDialog, QTextBrowser)
-from PyQt5.QtCore import Qt, QSize, QSettings
+                            QScrollArea, QDialog, QTextBrowser, QSizePolicy, 
+                            QProgressDialog)
+from PyQt5.QtCore import Qt, QSize, QSettings, QTimer
 from PyQt5.QtGui import QFont, QColor
+import random
+
+# Create a matplotlib canvas class for embedding plots
+class MplCanvas(FigureCanvas):
+    def __init__(self, parent=None, width=5, height=4, dpi=100):
+        self.fig = Figure(figsize=(width, height), dpi=dpi)
+        self.axes = self.fig.add_subplot(111)
+        super(MplCanvas, self).__init__(self.fig)
+        self.setParent(parent)
+        FigureCanvas.setSizePolicy(self, QSizePolicy.Expanding, QSizePolicy.Expanding)
+        FigureCanvas.updateGeometry(self)
 
 class LicenseDialog(QDialog):
     def __init__(self, parent=None):
@@ -93,15 +108,18 @@ class OptionsAlphaAnalyzer(QMainWindow):
         self.tabs = QTabWidget()
         self.main_tab = QWidget()
         self.guide_tab = QWidget()
+        self.simulation_tab = QWidget()  # New tab for Feature 2
         
         self.tabs.addTab(self.main_tab, "🔢 Analyzer")
         self.tabs.addTab(self.guide_tab, "📘 Formula Guide")
+        self.tabs.addTab(self.simulation_tab, "🔁 Simulated Alpha Engine")  # Added new tab
         
         self.main_layout.addWidget(self.tabs)
         
         # Setup tabs
         self.setup_main_tab()
         self.setup_guide_tab()
+        self.setup_simulation_tab()  # Setup for Feature 2
         
         # Data storage
         self.options_data = []
@@ -196,8 +214,9 @@ class OptionsAlphaAnalyzer(QMainWindow):
         input_group.setLayout(input_layout)
         main_layout.addWidget(input_group)
         
-        # Action Buttons
-        button_layout = QHBoxLayout()
+        # Action Buttons - Organize in two rows to prevent text cutting off
+        buttons_group = QGroupBox("Actions")
+        buttons_layout = QGridLayout()
         
         self.calculate_btn = QPushButton("Add to Analysis")
         self.calculate_btn.clicked.connect(self.add_option)
@@ -205,18 +224,38 @@ class OptionsAlphaAnalyzer(QMainWindow):
         self.clear_btn = QPushButton("Clear All")
         self.clear_btn.clicked.connect(self.clear_data)
         
+        self.delete_selected_btn = QPushButton("Delete Selected")
+        self.delete_selected_btn.clicked.connect(self.delete_selected_option)
+        
         self.csv_import_btn = QPushButton("Import CSV")
         self.csv_import_btn.clicked.connect(self.import_csv)
+        
+        self.template_btn = QPushButton("CSV Template")
+        self.template_btn.clicked.connect(self.download_csv_template)
         
         self.export_btn = QPushButton("Export Results")
         self.export_btn.clicked.connect(self.export_results)
         
-        button_layout.addWidget(self.calculate_btn)
-        button_layout.addWidget(self.clear_btn)
-        button_layout.addWidget(self.csv_import_btn)
-        button_layout.addWidget(self.export_btn)
+        self.visualize_btn = QPushButton("Visualize Curve")
+        self.visualize_btn.clicked.connect(self.visualize_curve)
         
-        main_layout.addLayout(button_layout)
+        self.load_examples_btn = QPushButton("Load Examples")
+        self.load_examples_btn.clicked.connect(self.load_example_contracts)
+        
+        # First row
+        buttons_layout.addWidget(self.calculate_btn, 0, 0)
+        buttons_layout.addWidget(self.delete_selected_btn, 0, 1)
+        buttons_layout.addWidget(self.clear_btn, 0, 2)
+        buttons_layout.addWidget(self.load_examples_btn, 0, 3)
+        
+        # Second row
+        buttons_layout.addWidget(self.csv_import_btn, 1, 0)
+        buttons_layout.addWidget(self.template_btn, 1, 1)
+        buttons_layout.addWidget(self.export_btn, 1, 2)
+        buttons_layout.addWidget(self.visualize_btn, 1, 3)
+        
+        buttons_group.setLayout(buttons_layout)
+        main_layout.addWidget(buttons_group)
         
         # Auto Rank Checkbox
         rank_layout = QHBoxLayout()
@@ -237,6 +276,10 @@ class OptionsAlphaAnalyzer(QMainWindow):
         ])
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         main_layout.addWidget(self.results_table)
+        
+        # Make the results table allow row selection
+        self.results_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.results_table.setSelectionMode(QTableWidget.SingleSelection)
     
     def setup_guide_tab(self):
         guide_layout = QVBoxLayout(self.guide_tab)
@@ -586,6 +629,528 @@ class OptionsAlphaAnalyzer(QMainWindow):
             QMessageBox.critical(
                 self, "Export Error", 
                 f"Error exporting results: {str(e)}")
+
+    # Feature 1: Visualization methods
+    def visualize_curve(self):
+        """Visualize the options curve based on the current data"""
+        if not self.options_data:
+            QMessageBox.warning(self, "No Data", 
+                               "No options data to visualize. Please add options first or load example contracts.")
+            return
+        
+        # Create dialog to display the visualization
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Option Contract Curve Visualization")
+        dialog.setMinimumSize(800, 600)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Controls for visualization
+        controls_layout = QHBoxLayout()
+        
+        controls_layout.addWidget(QLabel("Metric to Plot:"))
+        
+        # Dropdown to select score type
+        score_selector = QComboBox()
+        score_selector.addItems([
+            "SAS (Scalping Alpha Score)",
+            "RA-SAS (Risk-Adjusted SAS)",
+            "TAS (True Alpha Score)",
+            "Expected Return (Full Quant Model)"
+        ])
+        score_selector.setCurrentIndex(self.equation_selector.currentIndex())
+        controls_layout.addWidget(score_selector)
+        
+        plot_btn = QPushButton("Update Plot")
+        controls_layout.addWidget(plot_btn)
+        
+        layout.addLayout(controls_layout)
+        
+        # Create the matplotlib canvas
+        canvas = MplCanvas(dialog, width=7, height=5, dpi=100)
+        layout.addWidget(canvas)
+        
+        # Initial plot
+        self._plot_curve(canvas, score_selector.currentIndex())
+        
+        # Connect signals
+        plot_btn.clicked.connect(lambda: self._plot_curve(canvas, score_selector.currentIndex()))
+        score_selector.currentIndexChanged.connect(lambda idx: self._plot_curve(canvas, idx))
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def _plot_curve(self, canvas, score_index):
+        """Plot the option curve on the given canvas using the selected score type"""
+        # Store current equation selection
+        current_idx = self.equation_selector.currentIndex()
+        
+        # Temporarily set equation to the selected one for plotting
+        self.equation_selector.setCurrentIndex(score_index)
+        
+        # Recalculate all options with the selected metric
+        for option in self.options_data:
+            formula, result = self.calculate_results(option)
+            option["formula"] = formula
+            option["result"] = result
+        
+        # Extract data for plotting
+        strikes = [option["strike"] for option in self.options_data]
+        results = [option["result"] for option in self.options_data]
+        
+        # Find the best option
+        best_idx = results.index(max(results))
+        
+        # Clear the axes and plot the data
+        canvas.axes.clear()
+        canvas.axes.plot(strikes, results, 'o-', color='blue')
+        canvas.axes.plot(strikes[best_idx], results[best_idx], 'o', color='green', markersize=10)
+        
+        # Add labels and title
+        canvas.axes.set_xlabel('Strike Price')
+        canvas.axes.set_ylabel(f'{self.equation_selector.currentText()} Value')
+        canvas.axes.set_title(f'Option Contract Curve: {self.equation_selector.currentText()}')
+        canvas.axes.grid(True, linestyle='--', alpha=0.7)
+        
+        # Add text annotation for the best contract
+        canvas.axes.annotate(f'Best: {strikes[best_idx]:.2f}', 
+                             (strikes[best_idx], results[best_idx]),
+                             xytext=(10, 10), textcoords='offset points',
+                             bbox=dict(boxstyle="round,pad=0.3", fc="white", ec="green", alpha=0.8))
+        
+        # Draw the plot
+        canvas.fig.tight_layout()
+        canvas.draw()
+        
+        # Restore original equation selection
+        self.equation_selector.setCurrentIndex(current_idx)
+    
+    def load_example_contracts(self):
+        """Load example contracts for demonstration"""
+        # Ask for confirmation if there's existing data
+        if self.options_data:
+            reply = QMessageBox.question(self, 'Confirm Load Examples', 
+                                     'This will clear existing data. Continue?',
+                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if reply != QMessageBox.Yes:
+                return
+        
+        # Clear existing data
+        self.options_data = []
+        
+        # Example underlying price and ATR
+        underlying_price = 100.0
+        atr = 2.5
+        
+        # Set values in the UI
+        self.input_fields["underlying"].setValue(underlying_price)
+        self.input_fields["atr"].setValue(atr)
+        
+        # Example options data (realistic values for a range of strikes)
+        example_options = [
+            # Strike, Delta, Gamma, Theta, Vega, Bid, Ask, IV
+            {"strike": 90.0, "delta": 0.82, "gamma": 0.031, "theta": -0.045, "vega": 0.052, "bid": 12.20, "ask": 12.40, "iv": 28.5},
+            {"strike": 95.0, "delta": 0.65, "gamma": 0.048, "theta": -0.062, "vega": 0.078, "bid": 7.80, "ask": 8.00, "iv": 30.2},
+            {"strike": 100.0, "delta": 0.50, "gamma": 0.052, "theta": -0.070, "vega": 0.085, "bid": 4.90, "ask": 5.10, "iv": 31.0},
+            {"strike": 105.0, "delta": 0.35, "gamma": 0.047, "theta": -0.065, "vega": 0.082, "bid": 2.80, "ask": 3.00, "iv": 32.5},
+            {"strike": 110.0, "delta": 0.22, "gamma": 0.038, "theta": -0.055, "vega": 0.068, "bid": 1.40, "ask": 1.60, "iv": 33.8},
+            {"strike": 115.0, "delta": 0.12, "gamma": 0.025, "theta": -0.040, "vega": 0.048, "bid": 0.65, "ask": 0.75, "iv": 35.0}
+        ]
+        
+        # Add each example option to the data
+        for option in example_options:
+            # Add common fields
+            option["slippage"] = 0.02
+            option["underlying"] = underlying_price
+            option["atr"] = atr
+            
+            # Calculate and add the result
+            formula, result = self.calculate_results(option)
+            option["formula"] = formula
+            option["result"] = result
+            
+            # Add to data storage
+            self.options_data.append(option)
+        
+        # Update the table display
+        self.update_results()
+        
+        # Inform the user
+        QMessageBox.information(self, "Example Contracts Loaded", 
+                               f"Successfully loaded {len(example_options)} example option contracts.")
+        
+    def setup_simulation_tab(self):
+        """Setup the simulation tab for Feature 2: Simulated Alpha Engine"""
+        sim_layout = QVBoxLayout(self.simulation_tab)
+        
+        # Title and introduction
+        title_label = QLabel("Simulated Alpha Engine (Backtesting)")
+        title_label.setFont(QFont("Arial", 14, QFont.Bold))
+        title_label.setAlignment(Qt.AlignCenter)
+        
+        intro_label = QLabel("Simulate option price changes based on underlying price movements to estimate performance.")
+        intro_label.setWordWrap(True)
+        intro_label.setAlignment(Qt.AlignCenter)
+        
+        sim_layout.addWidget(title_label)
+        sim_layout.addWidget(intro_label)
+        sim_layout.addSpacing(10)
+        
+        # Parameters section
+        param_group = QGroupBox("Simulation Parameters")
+        param_layout = QGridLayout()
+        
+        # Number of simulated trades
+        param_layout.addWidget(QLabel("Number of Simulations:"), 0, 0)
+        self.sim_trades = QDoubleSpinBox()
+        self.sim_trades.setDecimals(0)
+        self.sim_trades.setRange(1, 1000)
+        self.sim_trades.setValue(10)
+        param_layout.addWidget(self.sim_trades, 0, 1)
+        
+        # Starting stock price
+        param_layout.addWidget(QLabel("Starting Stock Price:"), 1, 0)
+        self.sim_price = QDoubleSpinBox()
+        self.sim_price.setRange(1, 10000)
+        self.sim_price.setValue(100)
+        param_layout.addWidget(self.sim_price, 1, 1)
+        
+        # Assumed volatility
+        param_layout.addWidget(QLabel("Assumed Volatility (%):"), 2, 0)
+        self.sim_vol = QDoubleSpinBox()
+        self.sim_vol.setRange(1, 200)
+        self.sim_vol.setValue(30)
+        param_layout.addWidget(self.sim_vol, 2, 1)
+        
+        # Holding period
+        param_layout.addWidget(QLabel("Holding Period (days):"), 3, 0)
+        self.sim_holding = QDoubleSpinBox()
+        self.sim_holding.setDecimals(0)
+        self.sim_holding.setRange(1, 5)
+        self.sim_holding.setValue(1)
+        param_layout.addWidget(self.sim_holding, 3, 1)
+        
+        # Use realistic execution checkbox
+        self.sim_realistic = QCheckBox("Use Realistic Execution (include slippage/spread)")
+        self.sim_realistic.setChecked(True)
+        param_layout.addWidget(self.sim_realistic, 4, 0, 1, 2)
+        
+        param_group.setLayout(param_layout)
+        sim_layout.addWidget(param_group)
+        
+        # Run simulation button
+        run_layout = QHBoxLayout()
+        self.run_sim_btn = QPushButton("Run Simulation")
+        self.run_sim_btn.clicked.connect(self.run_simulation)
+        run_layout.addStretch()
+        run_layout.addWidget(self.run_sim_btn)
+        run_layout.addStretch()
+        sim_layout.addLayout(run_layout)
+        
+        # Results table
+        sim_layout.addWidget(QLabel("Simulation Results:"))
+        self.sim_results_table = QTableWidget()
+        self.sim_results_table.setColumnCount(7)
+        self.sim_results_table.setHorizontalHeaderLabels([
+            "Strike", "Initial Score", "Avg. Return ($)", "Avg. Return (%)", 
+            "Win Rate", "Best Case", "Primary Edge Factor"
+        ])
+        self.sim_results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        sim_layout.addWidget(self.sim_results_table)
+    
+    def run_simulation(self):
+        """Run the options simulation based on user parameters"""
+        if not self.options_data:
+            QMessageBox.warning(self, "No Data", 
+                               "No options data to simulate. Please add options first or load example contracts.")
+            return
+        
+        # Get simulation parameters
+        num_sims = int(self.sim_trades.value())
+        stock_price = self.sim_price.value()
+        volatility = self.sim_vol.value() / 100  # Convert from percentage
+        holding_period = int(self.sim_holding.value())
+        use_realistic = self.sim_realistic.isChecked()
+        
+        # Create a more responsive progress dialog
+        progress = QProgressDialog("Running simulations...", "Cancel", 0, len(self.options_data) * num_sims, self)
+        progress.setWindowTitle("Simulation Progress")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.setValue(0)
+        
+        # Will store simulation results for each option
+        sim_results = []
+        
+        # Counter for progress updates
+        sim_counter = 0
+        
+        # Run simulation for each option
+        for option_idx, option in enumerate(self.options_data):
+            # Update progress dialog description
+            progress.setLabelText(f"Simulating option {option_idx+1} of {len(self.options_data)}\nStrike price: {option['strike']}")
+            
+            # Extract option parameters
+            strike = option["strike"]
+            delta = option["delta"]
+            gamma = option["gamma"]
+            theta = option["theta"]
+            vega = option["vega"]
+            iv = option["iv"] / 100  # Convert from percentage
+            bid = option["bid"]
+            ask = option["ask"]
+            
+            # Initial option value (mid-price)
+            initial_value = (bid + ask) / 2
+            
+            # Storage for simulation results
+            returns = []
+            win_count = 0
+            best_case = -float('inf')
+            
+            # Factor contribution trackers
+            delta_contrib = 0
+            gamma_contrib = 0
+            theta_contrib = 0
+            vega_contrib = 0
+            
+            # Run multiple simulations
+            for sim_idx in range(num_sims):
+                # Check if the user canceled
+                if progress.wasCanceled():
+                    QMessageBox.information(self, "Simulation Canceled", "Simulation was canceled by user.")
+                    return
+                    
+                # Copy initial values
+                current_price = stock_price
+                option_value = initial_value
+                
+                # Price path for the holding period
+                for day in range(holding_period):
+                    # Daily volatility
+                    daily_vol = volatility / np.sqrt(252)
+                    
+                    # Generate random price move (random walk)
+                    price_change = current_price * daily_vol * np.random.normal()
+                    new_price = current_price + price_change
+                    
+                    # Option value change components
+                    delta_change = delta * price_change
+                    gamma_change = 0.5 * gamma * price_change**2
+                    theta_change = theta / 252  # Daily theta
+                    
+                    # IV change (random but correlated with price move)
+                    iv_change = 0.01 * np.random.normal() - 0.005 * np.sign(price_change)
+                    vega_change = vega * iv_change * 100  # Vega per 1% change
+                    
+                    # Track factor contributions
+                    delta_contrib += abs(delta_change)
+                    gamma_contrib += abs(gamma_change)
+                    theta_contrib += abs(theta_change)
+                    vega_contrib += abs(vega_change)
+                    
+                    # Update option value
+                    option_value += delta_change + gamma_change + theta_change + vega_change
+                    
+                    # Update price for next iteration
+                    current_price = new_price
+                
+                # Apply realistic execution costs if selected
+                if use_realistic:
+                    # Apply slippage and spread to exit
+                    exit_cost = option["slippage"]
+                    if option_value > initial_value:  # Selling
+                        exit_price = option_value - exit_cost
+                    else:  # Buying back
+                        exit_price = option_value + exit_cost
+                else:
+                    exit_price = option_value
+                
+                # Calculate return for this simulation
+                sim_return = exit_price - initial_value
+                returns.append(sim_return)
+                
+                # Track win count and best case
+                if sim_return > 0:
+                    win_count += 1
+                best_case = max(best_case, sim_return)
+                
+                # Update progress
+                sim_counter += 1
+                progress.setValue(sim_counter)
+                
+                # Process UI events to keep the application responsive
+                QApplication.processEvents()
+            
+            # Calculate average return
+            avg_return = sum(returns) / num_sims
+            
+            # Calculate win rate
+            win_rate = (win_count / num_sims) * 100
+            
+            # Determine primary edge factor
+            factors = {
+                "Delta": delta_contrib,
+                "Gamma": gamma_contrib,
+                "Theta": theta_contrib,
+                "Vega": vega_contrib
+            }
+            primary_factor = max(factors, key=factors.get)
+            
+            # Initial score for reference
+            formula, score = self.calculate_results(option)
+            
+            # Add to results
+            sim_results.append({
+                "strike": strike,
+                "initial_score": score,
+                "avg_return": avg_return,
+                "avg_return_pct": (avg_return / initial_value) * 100 if initial_value > 0 else 0,
+                "win_rate": win_rate,
+                "best_case": best_case,
+                "primary_factor": primary_factor
+            })
+            
+            # Process UI events to keep the application responsive
+            QApplication.processEvents()
+        
+        # Close progress dialog
+        progress.close()
+        
+        # If all simulations were canceled, return
+        if not sim_results:
+            return
+        
+        # Sort results by average return (descending)
+        sim_results.sort(key=lambda x: x["avg_return"], reverse=True)
+        
+        # Display results in the table
+        self.sim_results_table.setRowCount(len(sim_results))
+        
+        for row, result in enumerate(sim_results):
+            # Set values in table
+            self.sim_results_table.setItem(row, 0, QTableWidgetItem(f"{result['strike']:.2f}"))
+            self.sim_results_table.setItem(row, 1, QTableWidgetItem(f"{result['initial_score']:.4f}"))
+            
+            # Color code based on return
+            return_item = QTableWidgetItem(f"${result['avg_return']:.2f}")
+            if result['avg_return'] > 0:
+                return_item.setBackground(QColor(200, 255, 200))  # Green for profit
+            else:
+                return_item.setBackground(QColor(255, 200, 200))  # Red for loss
+            self.sim_results_table.setItem(row, 2, return_item)
+            
+            # Percent return
+            pct_item = QTableWidgetItem(f"{result['avg_return_pct']:.2f}%")
+            if result['avg_return_pct'] > 0:
+                pct_item.setBackground(QColor(200, 255, 200))  # Green for profit
+            else:
+                pct_item.setBackground(QColor(255, 200, 200))  # Red for loss
+            self.sim_results_table.setItem(row, 3, pct_item)
+            
+            # Win rate
+            win_item = QTableWidgetItem(f"{result['win_rate']:.1f}%")
+            self.sim_results_table.setItem(row, 4, win_item)
+            
+            # Best case
+            self.sim_results_table.setItem(row, 5, QTableWidgetItem(f"${result['best_case']:.2f}"))
+            
+            # Primary factor
+            factor_item = QTableWidgetItem(result['primary_factor'])
+            # Color code by factor
+            if result['primary_factor'] == "Delta":
+                factor_item.setBackground(QColor(200, 200, 255))  # Blue
+            elif result['primary_factor'] == "Gamma":
+                factor_item.setBackground(QColor(255, 200, 255))  # Purple
+            elif result['primary_factor'] == "Theta":
+                factor_item.setBackground(QColor(255, 255, 200))  # Yellow
+            elif result['primary_factor'] == "Vega":
+                factor_item.setBackground(QColor(200, 255, 255))  # Cyan
+            self.sim_results_table.setItem(row, 6, factor_item)
+        
+        # Display summary message only if we have results
+        if sim_results:
+            QMessageBox.information(self, "Simulation Complete", 
+                                  f"Completed {num_sims} simulations over {holding_period} days.\n\n"
+                                  f"Best performing option: Strike ${sim_results[0]['strike']:.2f}\n"
+                                  f"Average return: ${sim_results[0]['avg_return']:.2f} ({sim_results[0]['avg_return_pct']:.2f}%)\n"
+                                  f"Primary edge factor: {sim_results[0]['primary_factor']}")
+
+    def download_csv_template(self):
+        """Create and download a CSV template with the correct format for importing options"""
+        # Define the headers needed for import
+        headers = ["Strike", "Delta", "Gamma", "Theta", "Vega", "Bid", "Ask", "IV"]
+        
+        # Create example data rows (use realistic option chain values)
+        example_data = [
+            # Strike, Delta, Gamma, Theta, Vega, Bid, Ask, IV
+            [100.0, 0.50, 0.0500, -0.0500, 0.0900, 4.90, 5.10, 30.0],
+            [105.0, 0.35, 0.0450, -0.0450, 0.0850, 2.80, 3.00, 32.0],
+            [110.0, 0.20, 0.0350, -0.0350, 0.0700, 1.40, 1.60, 34.0]
+        ]
+        
+        # Create a DataFrame
+        df = pd.DataFrame(example_data, columns=headers)
+        
+        # Get file save location from user
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Save CSV Template", "options_template.csv", "CSV Files (*.csv)")
+        
+        if not file_path:
+            return
+        
+        try:
+            # Save the template
+            df.to_csv(file_path, index=False)
+            
+            # Show info message with explanation
+            QMessageBox.information(
+                self, "CSV Template Created", 
+                f"CSV template has been saved to:\n{file_path}\n\n"
+                f"This template includes the following required columns:\n"
+                f"- Strike: The option strike price\n"
+                f"- Delta: The option delta (0-1 for calls, -1-0 for puts)\n"
+                f"- Gamma: The option gamma\n"
+                f"- Theta: The option theta (usually negative)\n"
+                f"- Vega: The option vega\n"
+                f"- Bid: The current bid price\n"
+                f"- Ask: The current ask price\n"
+                f"- IV: Implied volatility as a percentage (e.g., 30 for 30%)\n\n"
+                f"Fill in your data and use Import CSV to analyze your options chain."
+            )
+            
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Template Creation Error", 
+                f"Error creating CSV template: {str(e)}")
+
+    def delete_selected_option(self):
+        """Delete the selected option from the results table"""
+        selected_rows = self.results_table.selectionModel().selectedRows()
+        
+        if not selected_rows:
+            QMessageBox.information(self, "No Selection", "Please select an option to delete.")
+            return
+        
+        # Get the row index of the selected option
+        row = selected_rows[0].row()
+        
+        # Confirm deletion
+        strike = self.options_data[row]["strike"]
+        reply = QMessageBox.question(self, 'Confirm Delete', 
+                                 f'Are you sure you want to delete the option with strike {strike}?',
+                                 QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        
+        if reply == QMessageBox.Yes:
+            # Remove from data list
+            self.options_data.pop(row)
+            
+            # Update the table display
+            self.update_results()
+            
+            # Inform the user
+            QMessageBox.information(self, "Option Deleted", 
+                                  f"Option with strike {strike} has been removed from analysis.")
 
 def main():
     app = QApplication(sys.argv)
