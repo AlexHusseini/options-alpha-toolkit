@@ -13,6 +13,7 @@ from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 
 from options_alpha.ui.canvas import MplCanvas
+from options_alpha.ui.dialogs.hedge_calculator import HedgeCalculatorDialog
 
 
 class AnalyzerTab(QWidget):
@@ -48,6 +49,12 @@ class AnalyzerTab(QWidget):
         
         equation_layout.addWidget(QLabel("Select Metric:"))
         equation_layout.addWidget(self.equation_selector)
+        
+        # Add hedge calculator button
+        self.hedge_btn = QPushButton("Hedge Calculator")
+        self.hedge_btn.clicked.connect(self.show_hedge_calculator)
+        equation_layout.addWidget(self.hedge_btn)
+        
         equation_layout.addStretch()
         
         equation_group.setLayout(equation_layout)
@@ -779,4 +786,36 @@ class AnalyzerTab(QWidget):
             
             # Inform the user
             QMessageBox.information(self, "Option Deleted", 
-                                  f"Option with strike {strike} has been removed from analysis.") 
+                                  f"Option with strike {strike} has been removed from analysis.")
+
+    def show_hedge_calculator(self):
+        """Show the hedge calculator dialog"""
+        # Get selected option data if available
+        selected_option = None
+        selected_rows = self.results_table.selectionModel().selectedRows()
+        if selected_rows and self.options_data:
+            row = selected_rows[0].row()
+            if 0 <= row < len(self.options_data):
+                selected_option = self.options_data[row]
+        
+        # Open hedge calculator dialog
+        hedge_dialog = HedgeCalculatorDialog(self)
+        
+        # Pre-populate with selected option data if available
+        if selected_option:
+            # Find the position type index
+            position_index = 0  # Default to Long Call
+            if selected_option['delta'] < 0:
+                position_index = 1  # Long Put
+            
+            # Set values
+            hedge_dialog.position_type.setCurrentIndex(position_index)
+            hedge_dialog.quantity.setValue(1)  # Assume 1 contract
+            hedge_dialog.delta.setValue(abs(selected_option['delta']))
+            hedge_dialog.gamma.setValue(selected_option['gamma'])
+            hedge_dialog.stock_price.setValue(selected_option['underlying'])
+            
+            # Force recalculation
+            hedge_dialog.update_calculations()
+        
+        hedge_dialog.exec_() 

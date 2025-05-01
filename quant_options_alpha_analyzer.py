@@ -21,6 +21,7 @@ from options_alpha.ui.tabs.simulation_tab import SimulationTab
 from options_alpha.ui.tabs.analyzer_tab import AnalyzerTab
 from options_alpha.ui.tabs.guide_tab import GuideTab
 from options_alpha.ui.dialogs.license_dialog import LicenseDialog
+from options_alpha.ui.dialogs.hedge_calculator import HedgeCalculatorDialog
 
 class OptionsAlphaAnalyzer(QMainWindow):
     def __init__(self):
@@ -67,8 +68,26 @@ class OptionsAlphaAnalyzer(QMainWindow):
         
         self.main_layout.addWidget(self.tabs)
         
-        # Add a view license menu in a simple menu bar
+        # Create menu bar
+        self.setup_menu_bar()
+        
+    def setup_menu_bar(self):
+        """Setup the application menu bar"""
         menu_bar = self.menuBar()
+        
+        # File menu
+        file_menu = menu_bar.addMenu("File")
+        
+        exit_action = file_menu.addAction("Exit")
+        exit_action.triggered.connect(self.close)
+        
+        # Tools menu
+        tools_menu = menu_bar.addMenu("Tools")
+        
+        hedge_calculator_action = tools_menu.addAction("Hedge Calculator")
+        hedge_calculator_action.triggered.connect(self.show_hedge_calculator)
+        
+        # Help menu
         help_menu = menu_bar.addMenu("Help")
         
         view_license_action = help_menu.addAction("View License Agreement")
@@ -76,6 +95,11 @@ class OptionsAlphaAnalyzer(QMainWindow):
         
         about_action = help_menu.addAction("About")
         about_action.triggered.connect(self.show_about)
+    
+    def show_hedge_calculator(self):
+        """Show the hedge calculator dialog"""
+        hedge_dialog = HedgeCalculatorDialog(self)
+        hedge_dialog.exec_()
         
     def show_license(self):
         license_dialog = LicenseDialog(self)
