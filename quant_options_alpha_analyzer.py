@@ -600,26 +600,47 @@ class OptionsAlphaAnalyzer(QMainWindow):
         try:
             df = pd.read_csv(file_path)
             
+            # Display column debug info in case of issues
+            columns_info = ', '.join(df.columns)
+            print(f"Detected columns: {columns_info}")
+            
             # Try to map columns to our expected inputs
             mapping = {}
             header_map = {
-                'strike': ['strike', 'strike price', 'strikeprice'],
-                'delta': ['delta'],
-                'gamma': ['gamma'],
-                'theta': ['theta'],
-                'vega': ['vega'],
-                'bid': ['bid', 'bid price'],
-                'ask': ['ask', 'ask price'],
-                'iv': ['iv', 'implied volatility', 'impliedvolatility']
+                'strike': ['strike', 'strike price', 'strikeprice', 'Strike', 'Strike Price', 'StrikePrice'],
+                'delta': ['delta', 'Delta'],
+                'gamma': ['gamma', 'Gamma'],
+                'theta': ['theta', 'Theta'],
+                'vega': ['vega', 'Vega'],
+                'bid': ['bid', 'bid price', 'Bid', 'Bid Price'],
+                'ask': ['ask', 'ask price', 'Ask', 'Ask Price'],
+                'iv': ['iv', 'implied volatility', 'impliedvolatility', 'IV', 'Implied Volatility', 'ImpliedVolatility']
             }
             
-            columns = [col.lower() for col in df.columns]
-            
+            # Check for exact matches first (case sensitive)
             for our_field, possible_names in header_map.items():
+                if our_field in df.columns:
+                    mapping[our_field] = our_field
+                    continue
+                
+                # Then try case-insensitive matches
                 for name in possible_names:
-                    if name in columns:
+                    if name in df.columns:
                         mapping[our_field] = name
                         break
+            
+            # If we still don't have mappings, try lowercasing everything
+            if len(mapping) < len(header_map):
+                lowercase_columns = [col.lower() for col in df.columns]
+                for our_field, possible_names in header_map.items():
+                    if our_field in mapping:
+                        continue
+                    
+                    lowercase_names = [name.lower() for name in possible_names]
+                    for i, col in enumerate(lowercase_columns):
+                        if col in lowercase_names:
+                            mapping[our_field] = df.columns[i]  # Use original case
+                            break
             
             # Check if we have the minimum required fields
             required_fields = ['strike', 'delta', 'gamma', 'theta']
@@ -628,8 +649,10 @@ class OptionsAlphaAnalyzer(QMainWindow):
             if missing:
                 QMessageBox.warning(
                     self, "Missing Fields", 
-                    f"The CSV is missing required fields: {', '.join(missing)}. "
-                    f"The CSV columns are: {', '.join(df.columns)}")
+                    f"The CSV is missing required fields: {', '.join(missing)}.\n\n"
+                    f"The CSV columns are: {', '.join(df.columns)}\n\n"
+                    f"Expected column names: strike, delta, gamma, theta, vega, bid, ask, iv\n"
+                    f"(Column names are case-sensitive)")
                 return
             
             # Get values for fields that apply to all options
@@ -638,32 +661,43 @@ class OptionsAlphaAnalyzer(QMainWindow):
             atr = self.input_fields["atr"].value()
             
             # Import the options
+            successful_imports = 0
             for _, row in df.iterrows():
-                option_data = {
-                    'slippage': slippage,
-                    'underlying': underlying,
-                    'atr': atr
-                }
-                
-                # Map CSV values to our fields
-                for our_field, csv_field in mapping.items():
-                    option_data[our_field] = float(row[csv_field])
-                
-                # Fill in any missing fields with defaults
-                for field in self.input_fields:
-                    if field not in option_data:
-                        option_data[field] = 0.0
-                
-                # Calculate and add the option
-                formula, result = self.calculate_results(option_data)
-                option_data["formula"] = formula
-                option_data["result"] = result
-                self.options_data.append(option_data)
+                try:
+                    option_data = {
+                        'slippage': slippage,
+                        'underlying': underlying,
+                        'atr': atr
+                    }
+                    
+                    # Map CSV values to our fields
+                    for our_field, csv_field in mapping.items():
+                        option_data[our_field] = float(row[csv_field])
+                    
+                    # Fill in any missing fields with defaults
+                    for field in self.input_fields:
+                        if field not in option_data:
+                            option_data[field] = 0.0
+                    
+                    # Calculate and add the option
+                    formula, result = self.calculate_results(option_data)
+                    option_data["formula"] = formula
+                    option_data["result"] = result
+                    self.options_data.append(option_data)
+                    successful_imports += 1
+                except Exception as e:
+                    print(f"Error importing row: {str(e)}")
+                    continue
             
-            self.update_results()
-            QMessageBox.information(
-                self, "Import Successful", 
-                f"Successfully imported {len(df)} options from CSV.")
+            if successful_imports > 0:
+                self.update_results()
+                QMessageBox.information(
+                    self, "Import Successful", 
+                    f"Successfully imported {successful_imports} options from CSV.")
+            else:
+                QMessageBox.critical(
+                    self, "Import Error", 
+                    "Could not import any options from the CSV. Please check the file format.")
                 
         except Exception as e:
             QMessageBox.critical(
@@ -1569,8 +1603,8 @@ class OptionsAlphaAnalyzer(QMainWindow):
 
     def download_csv_template(self):
         """Create and download a CSV template with the correct format for importing options"""
-        # Define the headers needed for import
-        headers = ["Strike", "Delta", "Gamma", "Theta", "Vega", "Bid", "Ask", "IV"]
+        # Define the headers needed for import - use lowercase to match import function expectations
+        headers = ["strike", "delta", "gamma", "theta", "vega", "bid", "ask", "iv"]
         
         # Create example data rows (use realistic option chain values)
         example_data = [
@@ -1599,14 +1633,14 @@ class OptionsAlphaAnalyzer(QMainWindow):
                 self, "CSV Template Created", 
                 f"CSV template has been saved to:\n{file_path}\n\n"
                 f"This template includes the following required columns:\n"
-                f"- Strike: The option strike price\n"
-                f"- Delta: The option delta (0-1 for calls, -1-0 for puts)\n"
-                f"- Gamma: The option gamma\n"
-                f"- Theta: The option theta (usually negative)\n"
-                f"- Vega: The option vega\n"
-                f"- Bid: The current bid price\n"
-                f"- Ask: The current ask price\n"
-                f"- IV: Implied volatility as a percentage (e.g., 30 for 30%)\n\n"
+                f"- strike: The option strike price\n"
+                f"- delta: The option delta (0-1 for calls, -1-0 for puts)\n"
+                f"- gamma: The option gamma\n"
+                f"- theta: The option theta (usually negative)\n"
+                f"- vega: The option vega\n"
+                f"- bid: The current bid price\n"
+                f"- ask: The current ask price\n"
+                f"- iv: Implied volatility as a percentage (e.g., 30 for 30%)\n\n"
                 f"Fill in your data and use Import CSV to analyze your options chain."
             )
             
