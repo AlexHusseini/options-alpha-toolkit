@@ -903,13 +903,20 @@ class OptionsAlphaAnalyzer(QMainWindow):
         sim_layout.addWidget(param_group)
         
         # Run simulation button
-        run_layout = QHBoxLayout()
+        button_layout = QHBoxLayout()
         self.run_sim_btn = QPushButton("Run Simulation")
         self.run_sim_btn.clicked.connect(self.run_simulation)
-        run_layout.addStretch()
-        run_layout.addWidget(self.run_sim_btn)
-        run_layout.addStretch()
-        sim_layout.addLayout(run_layout)
+        
+        # Add the visualize results button
+        self.visualize_sim_btn = QPushButton("Visualize Results")
+        self.visualize_sim_btn.clicked.connect(self.visualize_simulation_results)
+        self.visualize_sim_btn.setEnabled(False)  # Initially disabled until we have results
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.run_sim_btn)
+        button_layout.addWidget(self.visualize_sim_btn)
+        button_layout.addStretch()
+        sim_layout.addLayout(button_layout)
         
         # Results table
         sim_layout.addWidget(QLabel("Simulation Results:"))
@@ -925,6 +932,9 @@ class OptionsAlphaAnalyzer(QMainWindow):
         self.sim_results_table.setSortingEnabled(True)
         
         sim_layout.addWidget(self.sim_results_table)
+        
+        # Store simulation detailed results for visualization
+        self.simulation_detailed_results = {}
     
     def run_simulation(self):
         """Run the options simulation based on user parameters"""
@@ -949,6 +959,8 @@ class OptionsAlphaAnalyzer(QMainWindow):
         
         # Will store simulation results for each option
         sim_results = []
+        # Clear detailed results storage
+        self.simulation_detailed_results = {}
         
         # Counter for progress updates
         sim_counter = 0
@@ -982,6 +994,15 @@ class OptionsAlphaAnalyzer(QMainWindow):
             theta_contrib = 0
             vega_contrib = 0
             
+            # Detailed information for visualization
+            detailed_data = {
+                'returns': [],
+                'delta_contributions': [],
+                'gamma_contributions': [],
+                'theta_contributions': [],
+                'vega_contributions': []
+            }
+            
             # Run multiple simulations
             for sim_idx in range(num_sims):
                 # Check if the user canceled
@@ -992,6 +1013,12 @@ class OptionsAlphaAnalyzer(QMainWindow):
                 # Copy initial values
                 current_price = stock_price
                 option_value = initial_value
+                
+                # This sim's factor contributions
+                this_delta_contrib = 0
+                this_gamma_contrib = 0
+                this_theta_contrib = 0
+                this_vega_contrib = 0
                 
                 # Price path for the holding period
                 for day in range(holding_period):
@@ -1017,6 +1044,12 @@ class OptionsAlphaAnalyzer(QMainWindow):
                     theta_contrib += abs(theta_change)
                     vega_contrib += abs(vega_change)
                     
+                    # For this individual simulation
+                    this_delta_contrib += delta_change
+                    this_gamma_contrib += gamma_change
+                    this_theta_contrib += theta_change
+                    this_vega_contrib += vega_change
+                    
                     # Update option value
                     option_value += delta_change + gamma_change + theta_change + vega_change
                     
@@ -1037,6 +1070,13 @@ class OptionsAlphaAnalyzer(QMainWindow):
                 # Calculate return for this simulation
                 sim_return = exit_price - initial_value
                 returns.append(sim_return)
+                
+                # Store detailed information for this simulation
+                detailed_data['returns'].append(sim_return)
+                detailed_data['delta_contributions'].append(this_delta_contrib)
+                detailed_data['gamma_contributions'].append(this_gamma_contrib)
+                detailed_data['theta_contributions'].append(this_theta_contrib)
+                detailed_data['vega_contributions'].append(this_vega_contrib)
                 
                 # Track win count and best case
                 if sim_return > 0:
@@ -1080,8 +1120,17 @@ class OptionsAlphaAnalyzer(QMainWindow):
                 "avg_return_pct": (avg_return / initial_value) * 100 if initial_value > 0 else 0,
                 "win_rate": win_rate,
                 "best_case": best_case,
-                "primary_factor": primary_factor
+                "primary_factor": primary_factor,
+                "factor_contributions": {
+                    "Delta": delta_contrib,
+                    "Gamma": gamma_contrib,
+                    "Theta": theta_contrib,
+                    "Vega": vega_contrib
+                }
             })
+            
+            # Store detailed results for visualization
+            self.simulation_detailed_results[strike] = detailed_data
             
             # Process UI events to keep the application responsive
             QApplication.processEvents()
@@ -1095,6 +1144,12 @@ class OptionsAlphaAnalyzer(QMainWindow):
         
         # Sort results by average return (descending)
         sim_results.sort(key=lambda x: x["avg_return"], reverse=True)
+        
+        # Store the results for visualization use
+        self.sim_results = sim_results
+        
+        # Enable the visualization button now that we have results
+        self.visualize_sim_btn.setEnabled(True)
         
         # Display results in the table
         self.sim_results_table.setRowCount(len(sim_results))
@@ -1187,6 +1242,294 @@ class OptionsAlphaAnalyzer(QMainWindow):
                                   f"Best performing option: Strike ${sim_results[0]['strike']:.2f}\n"
                                   f"Average return: ${sim_results[0]['avg_return']:.2f} ({sim_results[0]['avg_return_pct']:.2f}%)\n"
                                   f"Primary edge factor: {sim_results[0]['primary_factor']}")
+
+    def visualize_simulation_results(self):
+        """Visualize the simulation results with multiple charts"""
+        if not hasattr(self, 'sim_results') or not self.sim_results:
+            QMessageBox.warning(self, "No Results", 
+                               "No simulation results to visualize. Please run a simulation first.")
+            return
+        
+        # Create dialog for visualizations
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Simulation Results Visualization")
+        dialog.setMinimumSize(900, 700)
+        
+        layout = QVBoxLayout(dialog)
+        
+        # Tab widget for different visualizations
+        tab_widget = QTabWidget()
+        
+        # Tab 1: Return Distributions
+        distribution_tab = QWidget()
+        dist_layout = QVBoxLayout(distribution_tab)
+        
+        # Controls for distribution
+        dist_controls = QHBoxLayout()
+        dist_controls.addWidget(QLabel("Select Strike:"))
+        
+        strike_selector = QComboBox()
+        strikes = [str(result['strike']) for result in self.sim_results]
+        strike_selector.addItems(strikes)
+        dist_controls.addWidget(strike_selector)
+        
+        dist_layout.addLayout(dist_controls)
+        
+        # Canvas for distribution plot
+        dist_canvas = MplCanvas(distribution_tab, width=8, height=5)
+        dist_layout.addWidget(dist_canvas)
+        
+        # Tab 2: Comparison Chart
+        comparison_tab = QWidget()
+        comp_layout = QVBoxLayout(comparison_tab)
+        
+        # Controls for comparison
+        comp_controls = QHBoxLayout()
+        comp_controls.addWidget(QLabel("Metric to Compare:"))
+        
+        metric_selector = QComboBox()
+        metric_selector.addItems(["Average Return ($)", "Average Return (%)", "Win Rate", "Primary Edge Factor"])
+        comp_controls.addWidget(metric_selector)
+        
+        comp_layout.addLayout(comp_controls)
+        
+        # Canvas for comparison plot
+        comp_canvas = MplCanvas(comparison_tab, width=8, height=5)
+        comp_layout.addWidget(comp_canvas)
+        
+        # Tab 3: Greek Contributions
+        greek_tab = QWidget()
+        greek_layout = QVBoxLayout(greek_tab)
+        
+        # Canvas for greek contribution
+        greek_canvas = MplCanvas(greek_tab, width=8, height=5)
+        greek_layout.addWidget(greek_canvas)
+        
+        # Tab 4: Return vs Strike
+        return_vs_strike_tab = QWidget()
+        rvs_layout = QVBoxLayout(return_vs_strike_tab)
+        
+        # Canvas for return vs strike
+        rvs_canvas = MplCanvas(return_vs_strike_tab, width=8, height=5)
+        rvs_layout.addWidget(rvs_canvas)
+        
+        # Add all tabs
+        tab_widget.addTab(distribution_tab, "Return Distribution")
+        tab_widget.addTab(comparison_tab, "Strike Comparison")
+        tab_widget.addTab(greek_tab, "Greek Contributions")
+        tab_widget.addTab(return_vs_strike_tab, "Return vs Strike")
+        
+        layout.addWidget(tab_widget)
+        
+        # Function to plot distribution
+        def plot_distribution():
+            strike = float(strike_selector.currentText())
+            detailed_data = self.simulation_detailed_results.get(strike)
+            
+            if not detailed_data:
+                return
+            
+            returns = detailed_data['returns']
+            
+            dist_canvas.axes.clear()
+            dist_canvas.axes.hist(returns, bins=20, alpha=0.7, color='blue')
+            dist_canvas.axes.axvline(x=0, color='red', linestyle='--')
+            
+            # Calculate and show some stats
+            mean_return = np.mean(returns)
+            median_return = np.median(returns)
+            std_return = np.std(returns)
+            win_rate = sum(1 for r in returns if r > 0) / len(returns) * 100
+            
+            dist_canvas.axes.set_title(f'Return Distribution for Strike ${strike}')
+            dist_canvas.axes.set_xlabel('Return ($)')
+            dist_canvas.axes.set_ylabel('Frequency')
+            
+            # Add stats to the plot
+            stats_text = (f'Mean: ${mean_return:.2f}\n'
+                         f'Median: ${median_return:.2f}\n'
+                         f'Std Dev: ${std_return:.2f}\n'
+                         f'Win Rate: {win_rate:.1f}%')
+            
+            # Place the text box in the upper right
+            props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+            dist_canvas.axes.text(0.95, 0.95, stats_text, transform=dist_canvas.axes.transAxes, 
+                                 fontsize=10, verticalalignment='top', horizontalalignment='right',
+                                 bbox=props)
+            
+            dist_canvas.draw()
+        
+        # Function to plot comparison
+        def plot_comparison():
+            metric = metric_selector.currentIndex()
+            
+            strikes = [result['strike'] for result in self.sim_results]
+            
+            if metric == 0:  # Average Return ($)
+                values = [result['avg_return'] for result in self.sim_results]
+                title = 'Average Return ($) by Strike'
+                ylabel = 'Return ($)'
+                formatter = '${:.2f}'
+                colors = ['green' if v > 0 else 'red' for v in values]
+            elif metric == 1:  # Average Return (%)
+                values = [result['avg_return_pct'] for result in self.sim_results]
+                title = 'Average Return (%) by Strike'
+                ylabel = 'Return (%)'
+                formatter = '{:.1f}%'
+                colors = ['green' if v > 0 else 'red' for v in values]
+            elif metric == 2:  # Win Rate
+                values = [result['win_rate'] for result in self.sim_results]
+                title = 'Win Rate by Strike'
+                ylabel = 'Win Rate (%)'
+                formatter = '{:.1f}%'
+                colors = ['blue' for _ in values]
+            else:  # Primary Edge Factor
+                # For this one, we'll do a stacked bar chart of all factors
+                strikes = [result['strike'] for result in self.sim_results]
+                delta_values = [result['factor_contributions']['Delta'] for result in self.sim_results]
+                gamma_values = [result['factor_contributions']['Gamma'] for result in self.sim_results]
+                theta_values = [result['factor_contributions']['Theta'] for result in self.sim_results]
+                vega_values = [result['factor_contributions']['Vega'] for result in self.sim_results]
+                
+                # Normalize to percentages
+                totals = [d+g+t+v for d,g,t,v in zip(delta_values, gamma_values, theta_values, vega_values)]
+                delta_pct = [d/t*100 if t > 0 else 0 for d,t in zip(delta_values, totals)]
+                gamma_pct = [g/t*100 if t > 0 else 0 for g,t in zip(gamma_values, totals)]
+                theta_pct = [th/t*100 if t > 0 else 0 for th,t in zip(theta_values, totals)]
+                vega_pct = [v/t*100 if t > 0 else 0 for v,t in zip(vega_values, totals)]
+                
+                comp_canvas.axes.clear()
+                bar_width = 0.8
+                x = np.arange(len(strikes))
+                
+                bottom = np.zeros(len(strikes))
+                
+                # Plot stacked bars
+                p1 = comp_canvas.axes.bar(x, delta_pct, bar_width, bottom=bottom, label='Delta', color='royalblue')
+                bottom += delta_pct
+                p2 = comp_canvas.axes.bar(x, gamma_pct, bar_width, bottom=bottom, label='Gamma', color='violet')
+                bottom += gamma_pct
+                p3 = comp_canvas.axes.bar(x, theta_pct, bar_width, bottom=bottom, label='Theta', color='gold')
+                bottom += theta_pct
+                p4 = comp_canvas.axes.bar(x, vega_pct, bar_width, bottom=bottom, label='Vega', color='cyan')
+                
+                comp_canvas.axes.set_title('Greek Contribution by Strike')
+                comp_canvas.axes.set_xlabel('Strike Price')
+                comp_canvas.axes.set_ylabel('Contribution %')
+                comp_canvas.axes.set_xticks(x)
+                comp_canvas.axes.set_xticklabels([f'${s:.2f}' for s in strikes])
+                comp_canvas.axes.legend()
+                
+                comp_canvas.draw()
+                return
+            
+            comp_canvas.axes.clear()
+            bars = comp_canvas.axes.bar(strikes, values, color=colors)
+            
+            # Add value labels
+            for bar, value in zip(bars, values):
+                height = bar.get_height()
+                comp_canvas.axes.text(bar.get_x() + bar.get_width()/2., height,
+                                     formatter.format(value),
+                                     ha='center', va='bottom', rotation=0)
+            
+            comp_canvas.axes.set_title(title)
+            comp_canvas.axes.set_xlabel('Strike Price')
+            comp_canvas.axes.set_ylabel(ylabel)
+            comp_canvas.axes.set_xticklabels([f'${s:.2f}' for s in strikes])
+            
+            comp_canvas.draw()
+        
+        # Function to plot Greek contributions for each strike
+        def plot_greek_contributions():
+            strikes = [result['strike'] for result in self.sim_results]
+            
+            # Extract absolute factor contributions
+            delta_values = [result['factor_contributions']['Delta'] for result in self.sim_results]
+            gamma_values = [result['factor_contributions']['Gamma'] for result in self.sim_results]
+            theta_values = [result['factor_contributions']['Theta'] for result in self.sim_results]
+            vega_values = [result['factor_contributions']['Vega'] for result in self.sim_results]
+            
+            # Set up the figure
+            greek_canvas.axes.clear()
+            
+            x = np.arange(len(strikes))
+            width = 0.2
+            
+            # Plot grouped bars
+            greek_canvas.axes.bar(x - width*1.5, delta_values, width, label='Delta', color='royalblue')
+            greek_canvas.axes.bar(x - width/2, gamma_values, width, label='Gamma', color='violet')
+            greek_canvas.axes.bar(x + width/2, theta_values, width, label='Theta', color='gold')
+            greek_canvas.axes.bar(x + width*1.5, vega_values, width, label='Vega', color='cyan')
+            
+            greek_canvas.axes.set_title('Absolute Greek Contributions by Strike')
+            greek_canvas.axes.set_xlabel('Strike Price')
+            greek_canvas.axes.set_ylabel('Absolute Contribution')
+            greek_canvas.axes.set_xticks(x)
+            greek_canvas.axes.set_xticklabels([f'${s:.2f}' for s in strikes])
+            greek_canvas.axes.legend()
+            
+            greek_canvas.draw()
+        
+        # Function to plot return vs strike with win rate
+        def plot_return_vs_strike():
+            strikes = [result['strike'] for result in self.sim_results]
+            returns = [result['avg_return'] for result in self.sim_results]
+            win_rates = [result['win_rate'] for result in self.sim_results]
+            
+            # Create figure with two Y axes
+            rvs_canvas.axes.clear()
+            ax2 = rvs_canvas.axes.twinx()
+            
+            # Plot return line
+            line1 = rvs_canvas.axes.plot(strikes, returns, 'o-', color='blue', label='Avg Return ($)')
+            
+            # Color points by profit/loss
+            for i, ret in enumerate(returns):
+                if ret > 0:
+                    rvs_canvas.axes.plot(strikes[i], ret, 'o', color='green', markersize=8)
+                else:
+                    rvs_canvas.axes.plot(strikes[i], ret, 'o', color='red', markersize=8)
+            
+            # Plot win rate line on secondary Y axis
+            line2 = ax2.plot(strikes, win_rates, 's--', color='orange', label='Win Rate (%)')
+            
+            # Add horizontal line at return = 0
+            rvs_canvas.axes.axhline(y=0, color='gray', linestyle='-', alpha=0.3)
+            
+            # Add horizontal line at win rate = 50%
+            ax2.axhline(y=50, color='gray', linestyle='--', alpha=0.3)
+            
+            # Set labels and title
+            rvs_canvas.axes.set_xlabel('Strike Price')
+            rvs_canvas.axes.set_ylabel('Average Return ($)')
+            ax2.set_ylabel('Win Rate (%)')
+            rvs_canvas.axes.set_title('Return and Win Rate vs Strike Price')
+            
+            # Add both legends
+            lines = line1 + line2
+            labels = [l.get_label() for l in lines]
+            rvs_canvas.axes.legend(lines, labels, loc='best')
+            
+            rvs_canvas.draw()
+        
+        # Initial plots
+        plot_distribution()
+        plot_comparison()
+        plot_greek_contributions()
+        plot_return_vs_strike()
+        
+        # Connect signals
+        strike_selector.currentIndexChanged.connect(plot_distribution)
+        metric_selector.currentIndexChanged.connect(plot_comparison)
+        
+        # Add close button
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(dialog.accept)
+        layout.addWidget(close_btn)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
 
     def download_csv_template(self):
         """Create and download a CSV template with the correct format for importing options"""
