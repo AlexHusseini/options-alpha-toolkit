@@ -1473,44 +1473,80 @@ class OptionsAlphaAnalyzer(QMainWindow):
         
         # Function to plot return vs strike with win rate
         def plot_return_vs_strike():
-            strikes = [result['strike'] for result in self.sim_results]
-            returns = [result['avg_return'] for result in self.sim_results]
-            win_rates = [result['win_rate'] for result in self.sim_results]
+            # Get the data and make sure it's sorted by strike price
+            data = [(result['strike'], result['avg_return'], result['win_rate']) 
+                    for result in self.sim_results]
+            # Sort by strike price to ensure a clean line
+            data.sort(key=lambda x: x[0])
             
-            # Create figure with two Y axes
-            rvs_canvas.axes.clear()
+            # Unpack the sorted data
+            strikes = [item[0] for item in data]
+            returns = [item[1] for item in data]
+            win_rates = [item[2] for item in data]
+            
+            # Start with a clean slate
+            rvs_canvas.fig.clear()
+            rvs_canvas.axes = rvs_canvas.fig.add_subplot(111)
+            
+            # Create the second axis
             ax2 = rvs_canvas.axes.twinx()
             
-            # Plot return line
-            line1 = rvs_canvas.axes.plot(strikes, returns, 'o-', color='blue', label='Avg Return ($)')
+            # Plot returns (blue line with markers)
+            rvs_canvas.axes.plot(strikes, returns, '-', color='blue', linewidth=2.5, alpha=0.7)
             
-            # Color points by profit/loss
+            # Add return data points
             for i, ret in enumerate(returns):
                 if ret > 0:
                     rvs_canvas.axes.plot(strikes[i], ret, 'o', color='green', markersize=8)
                 else:
                     rvs_canvas.axes.plot(strikes[i], ret, 'o', color='red', markersize=8)
             
-            # Plot win rate line on secondary Y axis
-            line2 = ax2.plot(strikes, win_rates, 's--', color='orange', label='Win Rate (%)')
+            # Plot win rate (orange line with square markers)
+            ax2.plot(strikes, win_rates, '-', color='orange', linewidth=2.5, alpha=0.7)
+            ax2.plot(strikes, win_rates, 's', color='orange', markersize=7)
             
-            # Add horizontal line at return = 0
+            # Reference lines
             rvs_canvas.axes.axhline(y=0, color='gray', linestyle='-', alpha=0.3)
-            
-            # Add horizontal line at win rate = 50%
             ax2.axhline(y=50, color='gray', linestyle='--', alpha=0.3)
             
-            # Set labels and title
-            rvs_canvas.axes.set_xlabel('Strike Price')
-            rvs_canvas.axes.set_ylabel('Average Return ($)')
-            ax2.set_ylabel('Win Rate (%)')
+            # Labels and styling
+            rvs_canvas.axes.set_xlabel('Strike Price', fontsize=10)
+            rvs_canvas.axes.set_ylabel('Average Return ($)', color='blue', fontsize=10)
+            ax2.set_ylabel('Win Rate (%)', color='orange', fontsize=10)
             rvs_canvas.axes.set_title('Return and Win Rate vs Strike Price')
             
-            # Add both legends
-            lines = line1 + line2
-            labels = [l.get_label() for l in lines]
-            rvs_canvas.axes.legend(lines, labels, loc='best')
+            # Set y-axis colors
+            rvs_canvas.axes.tick_params(axis='y', colors='blue')
+            ax2.tick_params(axis='y', colors='orange')
             
+            # Add strike price labels only at actual data points
+            rvs_canvas.axes.set_xticks(strikes)
+            rvs_canvas.axes.set_xticklabels([f'${s:.2f}' for s in strikes])
+            
+            # Sensible y-axis limits
+            min_return = min(returns)
+            max_return = max(returns)
+            padding = (max_return - min_return) * 0.15 if max_return > min_return else 1.0
+            rvs_canvas.axes.set_ylim(min_return - padding, max_return + padding)
+            ax2.set_ylim(0, max(100, max(win_rates) * 1.1))
+            
+            # Add a legend
+            from matplotlib.lines import Line2D
+            legend_elements = [
+                Line2D([0], [0], color='blue', marker='o', markersize=8, label='Avg Return ($)',
+                       markerfacecolor='blue', linewidth=2),
+                Line2D([0], [0], color='orange', marker='s', markersize=8, label='Win Rate (%)',
+                       markerfacecolor='orange', linewidth=2)
+            ]
+            rvs_canvas.axes.legend(handles=legend_elements, loc='best')
+            
+            # Clean grid
+            rvs_canvas.axes.grid(True, axis='x', linestyle='--', alpha=0.3)
+            
+            # Make sure everything fits
+            rvs_canvas.fig.tight_layout()
+            
+            # Update the canvas
             rvs_canvas.draw()
         
         # Initial plots
