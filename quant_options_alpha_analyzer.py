@@ -272,14 +272,18 @@ class OptionsAlphaAnalyzer(QMainWindow):
         self.results_table.setHorizontalHeaderLabels([
             "Strike", "Delta", "Gamma", "Theta", "Vega", 
             "Bid", "Ask", "Underlying", "ATR", "IV", "RV", 
-            "Calculation", "Result"
+            "Metric", "Result"
         ])
         self.results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        main_layout.addWidget(self.results_table)
+        
+        # Enable sorting for the results table
+        self.results_table.setSortingEnabled(True)
         
         # Make the results table allow row selection
         self.results_table.setSelectionBehavior(QTableWidget.SelectRows)
         self.results_table.setSelectionMode(QTableWidget.SingleSelection)
+        
+        main_layout.addWidget(self.results_table)
     
     def setup_guide_tab(self):
         guide_layout = QVBoxLayout(self.guide_tab)
@@ -476,51 +480,111 @@ class OptionsAlphaAnalyzer(QMainWindow):
         self.update_results()
     
     def update_results(self):
+        # Store current sorting state
+        header = self.results_table.horizontalHeader()
+        sort_column = header.sortIndicatorSection()
+        sort_order = header.sortIndicatorOrder()
+        
+        # Temporarily disable sorting while updating
+        self.results_table.setSortingEnabled(False)
+        
         # Clear the table
         self.results_table.setRowCount(0)
         
         if not self.options_data:
+            # Re-enable sorting before returning
+            self.results_table.setSortingEnabled(True)
             return
         
-        # Recalculate results based on current equation selection
-        for i, option in enumerate(self.options_data):
-            formula, result = self.calculate_results(option)
-            option["formula"] = formula
-            option["result"] = result
-        
-        # Sort data if auto-rank is checked
-        if self.auto_rank_checkbox.isChecked():
-            self.options_data.sort(key=lambda x: x["result"], reverse=True)
+        # Get base options data (sort if auto-rank is checked)
+        options_to_display = self.options_data.copy()
+        if self.auto_rank_checkbox.isChecked() and sort_column == 0:  # Only apply auto-rank if not custom sorted
+            options_to_display.sort(key=lambda x: x["result"], reverse=True)
         
         # Find best result for highlighting
-        best_result = max(option["result"] for option in self.options_data)
+        best_result = max(option["result"] for option in options_to_display)
         
         # Populate table
-        self.results_table.setRowCount(len(self.options_data))
+        self.results_table.setRowCount(len(options_to_display))
         
-        for row, option in enumerate(self.options_data):
-            # Set values
-            self.results_table.setItem(row, 0, QTableWidgetItem(f"{option['strike']:.2f}"))
-            self.results_table.setItem(row, 1, QTableWidgetItem(f"{option['delta']:.4f}"))
-            self.results_table.setItem(row, 2, QTableWidgetItem(f"{option['gamma']:.6f}"))
-            self.results_table.setItem(row, 3, QTableWidgetItem(f"{option['theta']:.4f}"))
-            self.results_table.setItem(row, 4, QTableWidgetItem(f"{option['vega']:.4f}"))
-            self.results_table.setItem(row, 5, QTableWidgetItem(f"{option['bid']:.2f}"))
-            self.results_table.setItem(row, 6, QTableWidgetItem(f"{option['ask']:.2f}"))
-            self.results_table.setItem(row, 7, QTableWidgetItem(f"{option['underlying']:.2f}"))
-            self.results_table.setItem(row, 8, QTableWidgetItem(f"{option['atr']:.2f}"))
-            self.results_table.setItem(row, 9, QTableWidgetItem(f"{option['iv']:.2f}%"))
-            self.results_table.setItem(row, 10, QTableWidgetItem(f"{option['rv']:.2f}%"))
-            self.results_table.setItem(row, 11, QTableWidgetItem(option["formula"]))
+        for row, option in enumerate(options_to_display):
+            # Set values - use QTableWidgetItem for text and custom items for numerics to ensure proper sorting
             
-            result_item = QTableWidgetItem(f"{option['result']:.4f}")
+            # Handle numeric columns with proper sorting
+            strike_item = QTableWidgetItem()
+            strike_item.setData(Qt.DisplayRole, float(option['strike']))
+            self.results_table.setItem(row, 0, strike_item)
+            
+            delta_item = QTableWidgetItem()
+            delta_item.setData(Qt.DisplayRole, float(option['delta']))
+            delta_item.setData(Qt.DisplayRole, option['delta'])
+            self.results_table.setItem(row, 1, delta_item)
+            
+            gamma_item = QTableWidgetItem()
+            gamma_item.setData(Qt.DisplayRole, float(option['gamma']))
+            self.results_table.setItem(row, 2, gamma_item)
+            
+            theta_item = QTableWidgetItem()
+            theta_item.setData(Qt.DisplayRole, float(option['theta']))
+            self.results_table.setItem(row, 3, theta_item)
+            
+            vega_item = QTableWidgetItem()
+            vega_item.setData(Qt.DisplayRole, float(option['vega']))
+            self.results_table.setItem(row, 4, vega_item)
+            
+            bid_item = QTableWidgetItem()
+            bid_item.setData(Qt.DisplayRole, float(option['bid']))
+            self.results_table.setItem(row, 5, bid_item)
+            
+            ask_item = QTableWidgetItem()
+            ask_item.setData(Qt.DisplayRole, float(option['ask']))
+            self.results_table.setItem(row, 6, ask_item)
+            
+            underlying_item = QTableWidgetItem()
+            underlying_item.setData(Qt.DisplayRole, float(option['underlying']))
+            self.results_table.setItem(row, 7, underlying_item)
+            
+            atr_item = QTableWidgetItem()
+            atr_item.setData(Qt.DisplayRole, float(option['atr']))
+            self.results_table.setItem(row, 8, atr_item)
+            
+            # Special format for percentage values
+            iv_item = QTableWidgetItem()
+            iv_item.setData(Qt.DisplayRole, float(option['iv']))
+            iv_item.setText(f"{option['iv']:.2f}%")
+            self.results_table.setItem(row, 9, iv_item)
+            
+            rv_item = QTableWidgetItem()
+            rv_item.setData(Qt.DisplayRole, float(option['rv']))
+            rv_item.setText(f"{option['rv']:.2f}%")
+            self.results_table.setItem(row, 10, rv_item)
+            
+            # Text items
+            metric_item = QTableWidgetItem(option["formula"])
+            self.results_table.setItem(row, 11, metric_item)
+            
+            # Result with numeric sorting
+            result_item = QTableWidgetItem()
+            result_item.setData(Qt.DisplayRole, float(option['result']))
+            result_item.setText(f"{option['result']:.4f}")
             self.results_table.setItem(row, 12, result_item)
             
-            # Highlight best results
+            # Highlight best results with darker gold/yellow color
             if option["result"] >= best_result * 0.9:  # Within 10% of the best
                 for col in range(self.results_table.columnCount()):
                     item = self.results_table.item(row, col)
-                    item.setBackground(QColor(200, 255, 200))  # Light green
+                    # Use a darker gold/yellow shade
+                    item.setBackground(QColor(240, 195, 80))  # Darker gold/yellow
+                
+            # Make second best (70-90% of best) a medium shade
+            elif option["result"] >= best_result * 0.7:  # Within 30% of the best
+                for col in range(self.results_table.columnCount()):
+                    item = self.results_table.item(row, col)
+                    item.setBackground(QColor(250, 220, 120))  # Medium gold/yellow
+        
+        # Re-enable sorting and restore previous sort
+        self.results_table.setSortingEnabled(True)
+        self.results_table.horizontalHeader().setSortIndicator(sort_column, sort_order)
     
     def clear_data(self):
         self.options_data = []
@@ -772,7 +836,7 @@ class OptionsAlphaAnalyzer(QMainWindow):
             # Add to data storage
             self.options_data.append(option)
         
-        # Update the table display
+        # Update the table display (will use the new subtle coloring)
         self.update_results()
         
         # Inform the user
@@ -856,6 +920,10 @@ class OptionsAlphaAnalyzer(QMainWindow):
             "Win Rate", "Best Case", "Primary Edge Factor"
         ])
         self.sim_results_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        
+        # Enable sorting for the simulation results table
+        self.sim_results_table.setSortingEnabled(True)
+        
         sim_layout.addWidget(self.sim_results_table)
     
     def run_simulation(self):
@@ -906,7 +974,7 @@ class OptionsAlphaAnalyzer(QMainWindow):
             # Storage for simulation results
             returns = []
             win_count = 0
-            best_case = -float('inf')
+            best_case = -float('inf')  # Initialize to negative infinity
             
             # Factor contribution trackers
             delta_contrib = 0
@@ -1000,6 +1068,10 @@ class OptionsAlphaAnalyzer(QMainWindow):
             # Initial score for reference
             formula, score = self.calculate_results(option)
             
+            # Ensure best_case has a valid value (handle case where all returns are negative)
+            if best_case == -float('inf'):
+                best_case = max(returns) if returns else 0.0
+            
             # Add to results
             sim_results.append({
                 "strike": strike,
@@ -1028,34 +1100,71 @@ class OptionsAlphaAnalyzer(QMainWindow):
         self.sim_results_table.setRowCount(len(sim_results))
         
         for row, result in enumerate(sim_results):
-            # Set values in table
-            self.sim_results_table.setItem(row, 0, QTableWidgetItem(f"{result['strike']:.2f}"))
-            self.sim_results_table.setItem(row, 1, QTableWidgetItem(f"{result['initial_score']:.4f}"))
+            # Set values with proper sorting
             
-            # Color code based on return
-            return_item = QTableWidgetItem(f"${result['avg_return']:.2f}")
+            # Strike - numeric
+            strike_item = QTableWidgetItem()
+            strike_item.setData(Qt.DisplayRole, float(result['strike']))
+            self.sim_results_table.setItem(row, 0, strike_item)
+            
+            # Initial score - numeric
+            score_item = QTableWidgetItem()
+            score_item.setData(Qt.DisplayRole, float(result['initial_score']))
+            score_item.setText(f"{result['initial_score']:.4f}")
+            self.sim_results_table.setItem(row, 1, score_item)
+            
+            # Average return ($) - numeric with color
+            return_item = QTableWidgetItem()
+            return_item.setData(Qt.DisplayRole, float(result['avg_return']))
+            return_item.setText(f"${result['avg_return']:.2f}")
+            
             if result['avg_return'] > 0:
-                return_item.setBackground(QColor(200, 255, 200))  # Green for profit
+                # Use a darker green for profits
+                return_item.setBackground(QColor(75, 145, 75))  # Darker green
+                return_item.setForeground(QColor(255, 255, 255))  # White text
             else:
-                return_item.setBackground(QColor(255, 200, 200))  # Red for loss
+                # Use a darker red for losses
+                return_item.setBackground(QColor(145, 75, 75))  # Darker red
+                return_item.setForeground(QColor(255, 255, 255))  # White text
             self.sim_results_table.setItem(row, 2, return_item)
             
-            # Percent return
-            pct_item = QTableWidgetItem(f"{result['avg_return_pct']:.2f}%")
+            # Percent return - numeric with color
+            pct_item = QTableWidgetItem()
+            pct_item.setData(Qt.DisplayRole, float(result['avg_return_pct']))
+            pct_item.setText(f"{result['avg_return_pct']:.2f}%")
+            
             if result['avg_return_pct'] > 0:
-                pct_item.setBackground(QColor(200, 255, 200))  # Green for profit
+                # Use a darker green for profits
+                pct_item.setBackground(QColor(75, 145, 75))  # Darker green
+                pct_item.setForeground(QColor(255, 255, 255))  # White text
             else:
-                pct_item.setBackground(QColor(255, 200, 200))  # Red for loss
+                # Use a darker red for losses
+                pct_item.setBackground(QColor(145, 75, 75))  # Darker red
+                pct_item.setForeground(QColor(255, 255, 255))  # White text
             self.sim_results_table.setItem(row, 3, pct_item)
             
-            # Win rate
-            win_item = QTableWidgetItem(f"{result['win_rate']:.1f}%")
+            # Win rate - numeric with percent
+            win_item = QTableWidgetItem()
+            win_item.setData(Qt.DisplayRole, float(result['win_rate']))
+            win_item.setText(f"{result['win_rate']:.1f}%")
             self.sim_results_table.setItem(row, 4, win_item)
             
-            # Best case
-            self.sim_results_table.setItem(row, 5, QTableWidgetItem(f"${result['best_case']:.2f}"))
+            # Best case - numeric with dollar - with safeguard
+            best_item = QTableWidgetItem()
+            try:
+                best_case_value = float(result['best_case'])
+                # Handle invalid values
+                if not np.isfinite(best_case_value):
+                    best_case_value = 0.0
+                best_item.setData(Qt.DisplayRole, best_case_value)
+                best_item.setText(f"${best_case_value:.2f}")
+            except (ValueError, TypeError):
+                # Fallback for any unexpected errors
+                best_item.setData(Qt.DisplayRole, 0.0)
+                best_item.setText("$0.00")
+            self.sim_results_table.setItem(row, 5, best_item)
             
-            # Primary factor
+            # Primary factor - text
             factor_item = QTableWidgetItem(result['primary_factor'])
             # Color code by factor
             if result['primary_factor'] == "Delta":
@@ -1067,6 +1176,9 @@ class OptionsAlphaAnalyzer(QMainWindow):
             elif result['primary_factor'] == "Vega":
                 factor_item.setBackground(QColor(200, 255, 255))  # Cyan
             self.sim_results_table.setItem(row, 6, factor_item)
+        
+        # Re-enable sorting
+        self.sim_results_table.setSortingEnabled(True)
         
         # Display summary message only if we have results
         if sim_results:
@@ -1129,11 +1241,16 @@ class OptionsAlphaAnalyzer(QMainWindow):
         selected_rows = self.results_table.selectionModel().selectedRows()
         
         if not selected_rows:
-            QMessageBox.information(self, "No Selection", "Please select an option to delete.")
+            QMessageBox.information(self, "No Selection", "Please select an option to delete by clicking on its row.")
             return
         
         # Get the row index of the selected option
         row = selected_rows[0].row()
+        
+        # Make sure we have a valid row
+        if row < 0 or row >= len(self.options_data):
+            QMessageBox.warning(self, "Selection Error", "Invalid selection. Please try again.")
+            return
         
         # Confirm deletion
         strike = self.options_data[row]["strike"]
