@@ -6,13 +6,82 @@ from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout,
                             QComboBox, QTabWidget, QPushButton, QTableWidget, 
                             QTableWidgetItem, QCheckBox, QHeaderView, QGroupBox, 
                             QDoubleSpinBox, QFileDialog, QMessageBox, QToolTip, 
-                            QScrollArea)
-from PyQt5.QtCore import Qt, QSize
+                            QScrollArea, QDialog, QTextBrowser)
+from PyQt5.QtCore import Qt, QSize, QSettings
 from PyQt5.QtGui import QFont, QColor
+
+class LicenseDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("License Agreement")
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setMinimumSize(700, 500)
+        
+        layout = QVBoxLayout(self)
+        
+        # License text
+        license_text = """# Quant Options Alpha Analyzer - Modified MIT License
+
+Copyright (c) 2025, Alexander Husseini
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to use, copy, modify, and/or merge copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+1. The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+2. **Non-Commercial Restriction**: The Software may not be sold, licensed, rented, leased or otherwise commercially redistributed without explicit written permission from the copyright holder.
+
+3. **Attribution Requirement**: Any use, reproduction, or distribution of the Software must include proper attribution to Alexander Husseini as the original author.
+
+4. **Financial Disclaimer**:
+   a) This Software is provided for EDUCATIONAL AND INFORMATIONAL PURPOSES ONLY and does not constitute financial, investment, or trading advice.
+   b) The author is not registered as a securities broker-dealer, investment advisor, or financial advisor.
+   c) Users are solely responsible for their trading decisions and any resulting financial gains or losses.
+   d) Past performance of any model or calculation implemented in the Software does not guarantee future results.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, FINANCIAL LOSSES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+BY USING THE SOFTWARE, YOU ACKNOWLEDGE THAT YOU ASSUME ALL RISKS ASSOCIATED WITH THE USE OF THE SOFTWARE FOR FINANCIAL ANALYSIS OR TRADING PURPOSES."""
+        
+        text_browser = QTextBrowser()
+        text_browser.setPlainText(license_text)
+        layout.addWidget(text_browser)
+        
+        # Buttons
+        button_layout = QHBoxLayout()
+        
+        self.accept_button = QPushButton("I Accept")
+        self.accept_button.clicked.connect(self.accept)
+        
+        self.decline_button = QPushButton("I Decline")
+        self.decline_button.clicked.connect(self.reject)
+        
+        button_layout.addStretch()
+        button_layout.addWidget(self.accept_button)
+        button_layout.addWidget(self.decline_button)
+        
+        layout.addLayout(button_layout)
+        self.setLayout(layout)
 
 class OptionsAlphaAnalyzer(QMainWindow):
     def __init__(self):
         super().__init__()
+        
+        # Check if license has been accepted
+        settings = QSettings("AlexanderHusseini", "QuantOptionsAlphaAnalyzer")
+        license_accepted = settings.value("license_accepted", False, type=bool)
+        
+        if not license_accepted:
+            # Show license dialog
+            license_dialog = LicenseDialog(self)
+            result = license_dialog.exec_()
+            
+            if result == QDialog.Accepted:
+                # User accepted the license
+                settings.setValue("license_accepted", True)
+            else:
+                # User declined the license, exit the application
+                sys.exit(0)
+        
         self.setWindowTitle("Quant Options Alpha Analyzer")
         self.setMinimumSize(900, 700)
         
@@ -37,6 +106,30 @@ class OptionsAlphaAnalyzer(QMainWindow):
         # Data storage
         self.options_data = []
         
+        # Add a view license menu in a simple menu bar
+        menu_bar = self.menuBar()
+        help_menu = menu_bar.addMenu("Help")
+        
+        view_license_action = help_menu.addAction("View License Agreement")
+        view_license_action.triggered.connect(self.show_license)
+        
+        about_action = help_menu.addAction("About")
+        about_action.triggered.connect(self.show_about)
+        
+    def show_license(self):
+        license_dialog = LicenseDialog(self)
+        license_dialog.accept_button.setVisible(False)
+        license_dialog.decline_button.setText("Close")
+        license_dialog.exec_()
+        
+    def show_about(self):
+        QMessageBox.about(self, "About Quant Options Alpha Analyzer", 
+                          "Quant Options Alpha Analyzer\n\n"
+                          "© 2025 Alexander Husseini\n\n"
+                          "A quantitative options analysis tool for evaluating "
+                          "options trading opportunities based on alpha metrics.\n\n"
+                          "Website: alexhusseini.com")
+    
     def setup_main_tab(self):
         main_layout = QVBoxLayout(self.main_tab)
         
