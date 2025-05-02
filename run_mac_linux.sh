@@ -45,6 +45,15 @@ if [ $? -ne 0 ]; then
 fi
 echo "Using Python command: $PYTHON_CMD"
 
+# Check Python version
+$PYTHON_CMD -c "import sys; print(f'Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+$PYTHON_CMD -c "import sys; sys.exit(0 if sys.version_info.major >= 3 and sys.version_info.minor >= 7 else 1)" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "Warning: This application requires Python 3.7 or higher."
+    echo "Current Python version may not be compatible."
+    read -p "Press Enter to continue anyway or Ctrl+C to exit..."
+fi
+
 # Check if virtual environment exists and activate it
 if [ -f "venv/bin/activate" ]; then
     echo "Activating virtual environment..."
@@ -81,23 +90,73 @@ if [ ! -f "quant_options_alpha_analyzer.py" ]; then
     exit 1
 fi
 
-# Check if requirements are installed
-echo "Checking requirements..."
-$PYTHON_CMD -c "import sys; sys.exit(0 if all(m in sys.modules or __import__(m) for m in ['PyQt5', 'numpy', 'pandas', 'matplotlib', 'scipy']) else 1)" 2>/dev/null
-if [ $? -ne 0 ]; then
+# Function to try installing packages with different methods
+try_install_packages() {
     echo "Installing required packages..."
+    echo ""
+    
+    # Attempt 1: Use pip directly
+    echo "Attempt 1: Using pip install..."
     if [ $VENV_ACTIVE -eq 1 ]; then
         pip install -r requirements.txt
     else
         $PYTHON_CMD -m pip install -r requirements.txt
     fi
     
-    if [ $? -ne 0 ]; then
-        echo "Failed to install required packages."
-        echo "Please run: pip install -r requirements.txt"
-        read -p "Press Enter to exit..."
-        exit 1
+    if [ $? -eq 0 ]; then
+        return 0
     fi
+    
+    echo "First attempt failed. Trying alternate methods..."
+    echo ""
+    
+    # Attempt 2: Use pip with --user flag
+    echo "Attempt 2: Using pip install with --user flag..."
+    if [ $VENV_ACTIVE -eq 1 ]; then
+        pip install --user -r requirements.txt
+    else
+        $PYTHON_CMD -m pip install --user -r requirements.txt
+    fi
+    
+    if [ $? -eq 0 ]; then
+        return 0
+    fi
+    
+    # Attempt 3: Try using sudo if available
+    echo "Second attempt failed. Trying with sudo if available..."
+    echo ""
+    
+    if command -v sudo &>/dev/null; then
+        echo "Attempt 3: Using sudo pip install..."
+        echo "You may be prompted for your password."
+        sudo $PYTHON_CMD -m pip install -r requirements.txt
+        
+        if [ $? -eq 0 ]; then
+            return 0
+        fi
+    else
+        echo "Sudo not available, skipping third attempt."
+    fi
+    
+    echo "All installation attempts failed."
+    echo ""
+    echo "TROUBLESHOOTING TIPS:"
+    echo "1. Check your internet connection"
+    echo "2. Try manually installing packages with: $PYTHON_CMD -m pip install PyQt5 numpy pandas matplotlib scipy"
+    echo "3. If you have multiple Python versions, ensure you're using the right one"
+    echo "4. On some systems, you may need to install system packages first, e.g.:"
+    echo "   - Ubuntu/Debian: sudo apt-get install python3-pyqt5 python3-numpy python3-matplotlib"
+    echo "   - macOS: brew install pyqt numpy matplotlib"
+    echo ""
+    read -p "Press Enter to attempt running without installing packages..."
+    return 1
+}
+
+# Check if requirements are installed
+echo "Checking requirements..."
+$PYTHON_CMD -c "import sys; sys.exit(0 if all(m in sys.modules or __import__(m) for m in ['PyQt5', 'numpy', 'pandas', 'matplotlib', 'scipy']) else 1)" 2>/dev/null
+if [ $? -ne 0 ]; then
+    try_install_packages
 fi
 
 # Run the application
@@ -107,7 +166,10 @@ $PYTHON_CMD quant_options_alpha_analyzer.py
 # Capture exit code
 EXIT_CODE=$?
 if [ $EXIT_CODE -ne 0 ]; then
+    echo ""
     echo "Application exited with error code: $EXIT_CODE"
+    echo "If you see an import error, you need to install the required packages."
+    echo "Try running: $PYTHON_CMD -m pip install PyQt5 numpy pandas matplotlib scipy"
 fi
 
 # If we activated a virtual environment, deactivate it

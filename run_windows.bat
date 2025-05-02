@@ -15,6 +15,16 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
+:: Check Python version
+python -c "import sys; print(f'Python {sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}')"
+python -c "import sys; sys.exit(0 if sys.version_info.major >= 3 and sys.version_info.minor >= 7 else 1)" >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Warning: This application requires Python 3.7 or higher.
+    echo Current Python version may not be compatible.
+    echo Press any key to continue anyway or Ctrl+C to exit...
+    pause >nul
+)
+
 :: Check if virtual environment exists and activate it
 if exist "venv\Scripts\activate.bat" (
     echo Activating virtual environment...
@@ -52,11 +62,37 @@ echo Checking requirements...
 python -c "import sys; sys.exit(0 if all(m in sys.modules or __import__(m) for m in ['PyQt5', 'numpy', 'pandas', 'matplotlib', 'scipy']) else 1)" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo Installing required packages...
+    echo.
+    
+    :: Try different installation methods
+    echo Attempt 1: Using pip install...
     pip install -r requirements.txt
     if %ERRORLEVEL% NEQ 0 (
-        echo Failed to install required packages. Please run: pip install -r requirements.txt
-        pause
-        exit /b 1
+        echo First attempt failed. Trying alternate methods...
+        echo.
+        
+        echo Attempt 2: Using python -m pip install...
+        python -m pip install -r requirements.txt
+        if %ERRORLEVEL% NEQ 0 (
+            echo Second attempt failed. Trying with --user flag...
+            echo.
+            
+            echo Attempt 3: Using pip install with --user flag...
+            pip install --user -r requirements.txt
+            if %ERRORLEVEL% NEQ 0 (
+                echo All installation attempts failed.
+                echo.
+                echo TROUBLESHOOTING TIPS:
+                echo 1. Try running this script as Administrator
+                echo 2. Check your internet connection
+                echo 3. Manually install packages with: pip install PyQt5 numpy pandas matplotlib scipy
+                echo 4. If you have multiple Python versions, try specifying fully qualified path, e.g.:
+                echo    C:\Python39\python.exe -m pip install -r requirements.txt
+                echo.
+                echo Press any key to attempt running without installing packages...
+                pause >nul
+            )
+        )
     )
 )
 
@@ -64,7 +100,10 @@ if %ERRORLEVEL% NEQ 0 (
 echo Launching Options Alpha Analyzer...
 python quant_options_alpha_analyzer.py
 if %ERRORLEVEL% NEQ 0 (
+    echo.
     echo Application exited with an error.
+    echo If you see an import error, you need to install the required packages.
+    echo Try running: pip install PyQt5 numpy pandas matplotlib scipy
 )
 
 :: If we activated a virtual environment, deactivate it
