@@ -10,6 +10,8 @@ A desktop application for quantitative analysis of options trading opportunities
 - **Data Import/Export**: Import option chains from CSV and export analysis results
 - **Formula Guide**: Built-in explanations of each formula and when to use it
 - **Option Contract Curve Visualizer**: Plot and visualize option contracts by strike price and alpha score
+- **Advanced Hedging Calculator**: Calculate delta and delta-gamma neutral hedge positions
+- **Enhanced Visualizations**: Performance metrics with smooth curves, probability cones, and return distributions
 - **Simulated Alpha Engine**: Backtest option contracts with simulated price paths to estimate performance
 
 ## Installation
@@ -20,6 +22,7 @@ A desktop application for quantitative analysis of options trading opportunities
 - NumPy
 - Pandas
 - Matplotlib
+- SciPy
 
 ### Setup
 
@@ -30,11 +33,23 @@ A desktop application for quantitative analysis of options trading opportunities
 pip install -r requirements.txt
 ```
 
-3. Run the application:
+3. Run the application using one of these methods:
 
+#### Option 1: Run from command line
 ```bash
 python quant_options_alpha_analyzer.py
 ```
+
+#### Option 2: Run using the provided run files
+- **Windows**: Double-click on `run_windows.bat`
+- **macOS/Linux**: Double-click on `run_mac_linux.sh` or run from terminal with:
+  ```bash
+  ./run_mac_linux.sh
+  ```
+  If you get a permission error, you may need to make it executable first:
+  ```bash
+  chmod +x run_mac_linux.sh
+  ```
 
 ## Usage
 
@@ -49,6 +64,7 @@ python quant_options_alpha_analyzer.py
    - Implied Volatility (IV)
 3. Click "Add to Analysis" to add the option to the results table
 4. Results are automatically ranked by the selected metric
+5. Use "Update Metrics" to recalculate all options with a different metric 
 
 ### Visualize Options Curve
 
@@ -57,6 +73,14 @@ python quant_options_alpha_analyzer.py
 3. Select which metric to plot on the graph
 4. The best option will be highlighted in green on the curve
 5. Use "Load Example Contracts" to quickly load predefined options for testing
+
+### Hedge Calculator
+
+1. Click "Hedge Calculator" button or select an option and click "Hedge Calculator"
+2. Use the tabbed interface to access different hedging strategies:
+   - **Delta Hedging**: Calculate stock-only hedges to neutralize delta exposure
+   - **Delta-Gamma Neutral**: Calculate combined stock and option positions to neutralize both delta and gamma
+   - **Advanced Options**: View detailed hedge metrics and position sizing
 
 ### Simulated Alpha Engine (Backtesting)
 
@@ -73,6 +97,11 @@ python quant_options_alpha_analyzer.py
    - Win rate percentage
    - Best case scenario
    - Primary edge factor (Delta, Gamma, Theta, or Vega)
+5. Click "Visualize Results" to explore detailed visualizations:
+   - Return Distribution: Histogram of possible returns for each strike
+   - Greek Contributions: Bar chart showing impact of each Greek
+   - Performance Metrics: Smoothed curves showing win rates and average returns
+   - Probability Cone: Visual representation of expected price ranges 
 
 ### Formulas
 
