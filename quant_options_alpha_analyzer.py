@@ -99,6 +99,26 @@ class OptionsAlphaAnalyzer(QMainWindow):
     def show_hedge_calculator(self):
         """Show the hedge calculator dialog"""
         hedge_dialog = HedgeCalculatorDialog(self)
+        
+        # Try to pre-populate with data from analyzer tab if it's the active tab
+        if self.tabs.currentWidget() == self.analyzer_tab and hasattr(self, 'options_data') and self.options_data:
+            # Check if any option is selected in the analyzer tab
+            selected_option = self.analyzer_tab.get_selected_option()
+            if selected_option:
+                # Determine position type based on delta
+                position_type = "Long Call"
+                if selected_option['delta'] < 0:
+                    position_type = "Long Put"
+                
+                # Set position data
+                hedge_dialog.set_position_data(
+                    position_type=position_type,
+                    quantity=1,  # Assume 1 contract
+                    delta=selected_option['delta'],
+                    gamma=selected_option['gamma'],
+                    stock_price=selected_option['underlying']
+                )
+        
         hedge_dialog.exec_()
         
     def show_license(self):

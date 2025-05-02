@@ -788,34 +788,41 @@ class AnalyzerTab(QWidget):
             QMessageBox.information(self, "Option Deleted", 
                                   f"Option with strike {strike} has been removed from analysis.")
 
-    def show_hedge_calculator(self):
-        """Show the hedge calculator dialog"""
-        # Get selected option data if available
-        selected_option = None
+    def get_selected_option(self):
+        """Get the currently selected option data
+        
+        Returns:
+            dict: Selected option data or None if no option is selected
+        """
         selected_rows = self.results_table.selectionModel().selectedRows()
         if selected_rows and self.options_data:
             row = selected_rows[0].row()
             if 0 <= row < len(self.options_data):
-                selected_option = self.options_data[row]
+                return self.options_data[row]
+        return None
+        
+    def show_hedge_calculator(self):
+        """Show the hedge calculator dialog"""
+        # Get selected option data if available
+        selected_option = self.get_selected_option()
         
         # Open hedge calculator dialog
         hedge_dialog = HedgeCalculatorDialog(self)
         
         # Pre-populate with selected option data if available
         if selected_option:
-            # Find the position type index
-            position_index = 0  # Default to Long Call
+            # Determine position type based on delta
+            position_type = "Long Call"
             if selected_option['delta'] < 0:
-                position_index = 1  # Long Put
+                position_type = "Long Put"
             
-            # Set values
-            hedge_dialog.position_type.setCurrentIndex(position_index)
-            hedge_dialog.quantity.setValue(1)  # Assume 1 contract
-            hedge_dialog.delta.setValue(abs(selected_option['delta']))
-            hedge_dialog.gamma.setValue(selected_option['gamma'])
-            hedge_dialog.stock_price.setValue(selected_option['underlying'])
-            
-            # Force recalculation
-            hedge_dialog.update_calculations()
+            # Set position data using the new method
+            hedge_dialog.set_position_data(
+                position_type=position_type,
+                quantity=1,  # Assume 1 contract
+                delta=selected_option['delta'],
+                gamma=selected_option['gamma'],
+                stock_price=selected_option['underlying']
+            )
         
         hedge_dialog.exec_() 
