@@ -50,6 +50,12 @@ class AnalyzerTab(QWidget):
         equation_layout.addWidget(QLabel("Select Metric:"))
         equation_layout.addWidget(self.equation_selector)
         
+        # Add update button for recalculating metrics
+        self.update_metrics_btn = QPushButton("Update Metrics")
+        self.update_metrics_btn.setToolTip("Recalculate all metrics using the selected equation")
+        self.update_metrics_btn.clicked.connect(self.recalculate_all_metrics)
+        equation_layout.addWidget(self.update_metrics_btn)
+        
         # Add hedge calculator button
         self.hedge_btn = QPushButton("Hedge Calculator")
         self.hedge_btn.clicked.connect(self.show_hedge_calculator)
@@ -825,4 +831,30 @@ class AnalyzerTab(QWidget):
                 stock_price=selected_option['underlying']
             )
         
-        hedge_dialog.exec_() 
+        hedge_dialog.exec_()
+
+    def recalculate_all_metrics(self):
+        """Recalculate all metrics using the selected equation"""
+        if not self.options_data:
+            QMessageBox.information(self, "No Data", "No options data to recalculate.")
+            return
+            
+        # Store the current selection formula name
+        metric_name = self.equation_selector.currentText()
+        
+        # Recalculate each option's metrics based on the selected equation
+        for option in self.options_data:
+            formula, result = self.calculate_results(option)
+            option["formula"] = formula
+            option["result"] = result
+        
+        # Update the display
+        self.update_results()
+        
+        # If parent window exists, also update its options_data reference
+        if hasattr(self.parent_window, 'options_data'):
+            self.parent_window.options_data = self.options_data
+        
+        # Show a status message
+        QMessageBox.information(self, "Metrics Updated", 
+                               f"All options have been recalculated using {metric_name}.") 
