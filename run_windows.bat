@@ -1,6 +1,11 @@
 @echo off
 echo Starting Options Alpha Toolkit...
 
+:: Change to the script's directory
+echo Setting up environment...
+cd /d "%~dp0"
+echo Working directory: %CD%
+
 :: Check if Python is installed
 where python >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
@@ -19,9 +24,25 @@ if exist "venv\Scripts\activate.bat" (
     call env\Scripts\activate.bat
 )
 
-:: Check if requirements.txt exists
+:: Create requirements.txt if it doesn't exist
 if not exist "requirements.txt" (
-    echo Error: requirements.txt not found.
+    echo Requirements.txt not found, creating it...
+    (
+        echo PyQt5^>=5.15.0
+        echo numpy^>=1.19.0
+        echo pandas^>=1.1.0
+        echo matplotlib^>=3.3.0
+        echo scipy^>=1.5.0
+    ) > requirements.txt
+    echo Created requirements.txt
+)
+
+:: Check if main script exists
+if not exist "quant_options_alpha_analyzer.py" (
+    echo Error: quant_options_alpha_analyzer.py not found.
+    echo Current directory: %CD%
+    echo Files in directory:
+    dir
     pause
     exit /b 1
 )
@@ -37,13 +58,6 @@ if %ERRORLEVEL% NEQ 0 (
         pause
         exit /b 1
     )
-)
-
-:: Check if main script exists
-if not exist "quant_options_alpha_analyzer.py" (
-    echo Error: quant_options_alpha_analyzer.py not found.
-    pause
-    exit /b 1
 )
 
 :: Run the application

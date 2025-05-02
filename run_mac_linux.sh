@@ -2,6 +2,14 @@
 
 echo "Starting Options Alpha Toolkit..."
 
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+echo "Script directory: $SCRIPT_DIR"
+
+# Change to the script directory to ensure all relative paths work correctly
+cd "$SCRIPT_DIR"
+echo "Working directory: $(pwd)"
+
 # Make this script executable if it isn't already
 if [ ! -x "$0" ]; then
     chmod +x "$0"
@@ -50,16 +58,25 @@ else
     VENV_ACTIVE=0
 fi
 
-# Check if requirements.txt exists
+# Create requirements.txt if it doesn't exist
 if [ ! -f "requirements.txt" ]; then
-    echo "Error: requirements.txt not found."
-    read -p "Press Enter to exit..."
-    exit 1
+    echo "Requirements.txt not found, creating it..."
+    cat > requirements.txt << EOF
+PyQt5>=5.15.0
+numpy>=1.19.0
+pandas>=1.1.0
+matplotlib>=3.3.0
+scipy>=1.5.0
+EOF
+    echo "Created requirements.txt"
 fi
 
 # Check if main script exists
 if [ ! -f "quant_options_alpha_analyzer.py" ]; then
     echo "Error: quant_options_alpha_analyzer.py not found."
+    echo "Current directory: $(pwd)"
+    echo "Files in directory:"
+    ls -la
     read -p "Press Enter to exit..."
     exit 1
 fi
