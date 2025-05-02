@@ -1,6 +1,15 @@
 @echo off
 echo Starting Options Alpha Toolkit...
 
+:: Check if Python is installed
+where python >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo Python not found. Please install Python 3.7 or higher.
+    echo Visit https://www.python.org/downloads/
+    pause
+    exit /b 1
+)
+
 :: Check if virtual environment exists and activate it
 if exist "venv\Scripts\activate.bat" (
     echo Activating virtual environment...
@@ -10,17 +19,39 @@ if exist "venv\Scripts\activate.bat" (
     call env\Scripts\activate.bat
 )
 
+:: Check if requirements.txt exists
+if not exist "requirements.txt" (
+    echo Error: requirements.txt not found.
+    pause
+    exit /b 1
+)
+
 :: Check if requirements are installed
 echo Checking requirements...
-python -c "import PyQt5, numpy, pandas, matplotlib, scipy" >nul 2>&1
+python -c "import sys; sys.exit(0 if all(m in sys.modules or __import__(m) for m in ['PyQt5', 'numpy', 'pandas', 'matplotlib', 'scipy']) else 1)" >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
     echo Installing required packages...
     pip install -r requirements.txt
+    if %ERRORLEVEL% NEQ 0 (
+        echo Failed to install required packages. Please run: pip install -r requirements.txt
+        pause
+        exit /b 1
+    )
+)
+
+:: Check if main script exists
+if not exist "quant_options_alpha_analyzer.py" (
+    echo Error: quant_options_alpha_analyzer.py not found.
+    pause
+    exit /b 1
 )
 
 :: Run the application
 echo Launching Options Alpha Analyzer...
 python quant_options_alpha_analyzer.py
+if %ERRORLEVEL% NEQ 0 (
+    echo Application exited with an error.
+)
 
 :: If we activated a virtual environment, deactivate it
 if exist "venv\Scripts\activate.bat" (
@@ -29,4 +60,6 @@ if exist "venv\Scripts\activate.bat" (
     call env\Scripts\deactivate.bat
 )
 
+echo.
+echo Application closed.
 pause 
