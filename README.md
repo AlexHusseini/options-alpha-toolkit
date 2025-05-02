@@ -14,42 +14,61 @@ A desktop application for quantitative analysis of options trading opportunities
 - **Enhanced Visualizations**: Performance metrics with smooth curves, probability cones, and return distributions
 - **Simulated Alpha Engine**: Backtest option contracts with simulated price paths to estimate performance
 
-## Installation
+## Installation & Running the Application
 
-### Requirements
+### Prerequisites
 - Python 3.7+
-- PyQt5
-- NumPy
-- Pandas
-- Matplotlib
-- SciPy
 
-### Setup
+### Option 1: Using the Easy Run Files (Recommended)
 
-1. Clone this repository or download the source code
-2. Install the required dependencies:
+We've included run files that handle everything for you automatically:
 
-```bash
-pip install -r requirements.txt
-```
+#### For Windows Users:
+1. Simply double-click on `run_windows.bat`
+2. The script will:
+   - Check if Python is installed
+   - Verify or create a requirements.txt file
+   - Install required dependencies automatically
+   - Launch the application
 
-3. Run the application using one of these methods:
+#### For macOS/Linux Users:
+1. Double-click on `run_mac_linux.sh` 
+   - If it doesn't execute, open Terminal and run:
+     ```bash
+     chmod +x /path/to/run_mac_linux.sh
+     /path/to/run_mac_linux.sh
+     ```
+2. The script will:
+   - Make itself executable if needed
+   - Find the appropriate Python command
+   - Verify or create a requirements.txt file
+   - Install required dependencies automatically
+   - Launch the application
 
-#### Option 1: Run from command line
-```bash
-python quant_options_alpha_analyzer.py
-```
+### Option 2: Manual Setup
 
-#### Option 2: Run using the provided run files
-- **Windows**: Double-click on `run_windows.bat`
-- **macOS/Linux**: Double-click on `run_mac_linux.sh` or run from terminal with:
-  ```bash
-  ./run_mac_linux.sh
-  ```
-  If you get a permission error, you may need to make it executable first:
-  ```bash
-  chmod +x run_mac_linux.sh
-  ```
+If you prefer manual installation:
+
+1. Install required dependencies:
+   ```bash
+   pip install PyQt5 numpy pandas matplotlib scipy
+   ```
+   or
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+2. Run the application:
+   ```bash
+   python quant_options_alpha_analyzer.py
+   ```
+
+### Troubleshooting
+
+- **"Python not found"**: Install Python 3.7 or higher from [python.org](https://www.python.org/downloads/)
+- **Package installation errors**: Try running with administrator/sudo privileges
+- **GUI doesn't appear**: Ensure PyQt5 is installed correctly
+- **Application crashes**: Check terminal output for error messages
 
 ## Usage
 
