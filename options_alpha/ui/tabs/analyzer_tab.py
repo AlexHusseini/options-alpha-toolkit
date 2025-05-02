@@ -8,7 +8,7 @@ import pandas as pd
 from PyQt5.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QGridLayout, 
                             QLabel, QComboBox, QPushButton, QTableWidget, 
                             QTableWidgetItem, QCheckBox, QHeaderView, QGroupBox, 
-                            QDoubleSpinBox, QFileDialog, QMessageBox)
+                            QDoubleSpinBox, QFileDialog, QMessageBox, QDialog)
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor
 
